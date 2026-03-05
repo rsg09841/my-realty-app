@@ -31,7 +31,6 @@ import {
   calcOwnFunds,
   calcExpenseDefaults,
   calcRentItemTotal,
-  calcTotalRentIncome,
   calcMonthlyRepayment,
   calcAnnualRepayment,
   calcDefaultPropertyTax,
@@ -39,10 +38,12 @@ import {
   calcDefaultCleaningUtilities,
   calcAnnualBalance,
   calcMonthlyBalance,
+  calcFullOccupancyYield,
   getTotalRentIncomeNum,
   getAnnualRepaymentNum,
   parseYenToMan,
   formatMan,
+  formatYenFromMan,
   EXPENSE_KEYS,
   ROOM_TYPES,
 } from '@/lib/property-types'
@@ -224,12 +225,30 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
               <Banknote className="size-4" />
               事業費
             </legend>
+            {/* Full occupancy yield */}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="fullOccupancyYield" className="text-sm text-foreground">
+                満室時利回り
+              </Label>
+              <Input
+                id="fullOccupancyYield"
+                value={calcFullOccupancyYield(property)}
+                readOnly
+                disabled
+                className="bg-muted font-semibold text-foreground"
+                placeholder="自動計算"
+              />
+              <p className="text-xs text-muted-foreground">
+                収支計画の「年間家賃収入」 ÷ 物件価格（自動計算）
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="propertyPrice" className="text-sm text-foreground">物件価格</Label>
                 <Input
                   id="propertyPrice"
-                  placeholder="例: 5,980万円"
+                  placeholder="例: 59,800,000円"
                   value={property.propertyPrice}
                   onChange={(e) => update('propertyPrice', e.target.value)}
                   className="bg-card"
@@ -239,7 +258,7 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
                 <Label htmlFor="repairCost" className="text-sm text-foreground">修繕費</Label>
                 <Input
                   id="repairCost"
-                  placeholder="例: 800万円"
+                  placeholder="例: 8,000,000円"
                   value={property.repairCost}
                   onChange={(e) => update('repairCost', e.target.value)}
                   className="bg-card"
@@ -249,7 +268,7 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
                 <Label htmlFor="otherCost" className="text-sm text-foreground">その他</Label>
                 <Input
                   id="otherCost"
-                  placeholder="例: 200万円"
+                  placeholder="例: 2,000,000円"
                   value={property.otherCost}
                   onChange={(e) => update('otherCost', e.target.value)}
                   className="bg-card"
@@ -301,7 +320,7 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
               <ExpenseInput
                 id="stampDuty"
                 label="契約書印紙代"
-                hint="固定 1万円"
+                hint="固定 100,000円"
                 value={property.stampDuty}
                 isManual={manuallyEdited.has('stampDuty')}
                 onChange={(v) => updateExpense('stampDuty', v)}
@@ -429,7 +448,7 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
                 <Label htmlFor="loanAmount" className="text-sm text-foreground">借入金</Label>
                 <Input
                   id="loanAmount"
-                  placeholder="例: 5,000万円"
+                  placeholder="例: 50,000,000円"
                   value={property.loanAmount}
                   onChange={(e) => {
                     setManuallyEdited(prev => new Set(prev).add('loanAmount'))
@@ -493,7 +512,7 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs text-muted-foreground">1戸当たり賃料</Label>
                     <Input
-                      placeholder="例: 8万円"
+                      placeholder="例: 80,000円"
                       value={item.rentPerUnit}
                       onChange={(e) => updateRentIncomeItem(item.id, 'rentPerUnit', e.target.value)}
                       className="bg-background h-9"
@@ -502,7 +521,7 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
                   <div className="flex flex-col gap-1.5">
                     <Label className="text-xs text-muted-foreground">賃料合計</Label>
                     <Input
-                      value={calcRentItemTotal(item) > 0 ? formatMan(calcRentItemTotal(item)) : ''}
+                      value={calcRentItemTotal(item) > 0 ? formatYenFromMan(calcRentItemTotal(item)) : ''}
                       readOnly
                       disabled
                       className="bg-muted h-9 font-medium"
@@ -535,11 +554,16 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
               <div className="flex items-center gap-3">
                 <Label className="text-sm font-semibold text-foreground">合計</Label>
                 <Input
-                  value={calcTotalRentIncome(property.rentIncomeItems)}
+                  value={
+                    (() => {
+                      const totalMan = getTotalRentIncomeNum(property.rentIncomeItems)
+                      return totalMan > 0 ? formatYenFromMan(totalMan) : ''
+                    })()
+                  }
                   readOnly
                   disabled
                   className="w-40 bg-primary/10 font-bold text-foreground text-base border-primary/30"
-                  placeholder="0万円"
+                  placeholder="0円"
                 />
               </div>
             </div>
@@ -556,7 +580,7 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
                 <Label htmlFor="repaymentLoanAmount" className="text-sm text-foreground">融資金額</Label>
                 <Input
                   id="repaymentLoanAmount"
-                  placeholder="例: 5,000万円"
+                  placeholder="例: 50,000,000円"
                   value={property.repaymentLoanAmount || property.loanAmount}
                   onChange={(e) => update('repaymentLoanAmount', e.target.value)}
                   className="bg-card"
@@ -631,7 +655,12 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
                 <Label htmlFor="annualRentIncome" className="text-sm text-foreground">年間家賃収入</Label>
                 <Input
                   id="annualRentIncome"
-                  value={calcTotalRentIncome(property.rentIncomeItems)}
+                  value={
+                    (() => {
+                      const totalMan = getTotalRentIncomeNum(property.rentIncomeItems)
+                      return totalMan > 0 ? formatYenFromMan(totalMan) : ''
+                    })()
+                  }
                   readOnly
                   disabled
                   className="bg-muted font-semibold text-foreground"
@@ -655,7 +684,7 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
                 <Label htmlFor="propertyTax" className="text-sm text-foreground">固定資産税</Label>
                 <Input
                   id="propertyTax"
-                  placeholder={calcDefaultPropertyTax(property) || '例: 40万円'}
+                  placeholder={calcDefaultPropertyTax(property) || '例: 400,000円'}
                   value={property.propertyTax || calcDefaultPropertyTax(property)}
                   onChange={(e) => update('propertyTax', e.target.value)}
                   className="bg-card"
@@ -666,7 +695,7 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
                 <Label htmlFor="managementFee" className="text-sm text-foreground">管理料</Label>
                 <Input
                   id="managementFee"
-                  placeholder={calcDefaultManagementFee(property) || '例: 30万円'}
+                  placeholder={calcDefaultManagementFee(property) || '例: 300,000円'}
                   value={property.managementFee || calcDefaultManagementFee(property)}
                   onChange={(e) => update('managementFee', e.target.value)}
                   className="bg-card"
@@ -677,7 +706,7 @@ export function PropertyForm({ open, onOpenChange, onSubmit, editProperty }: Pro
                 <Label htmlFor="cleaningUtilities" className="text-sm text-foreground">清掃・水道光熱</Label>
                 <Input
                   id="cleaningUtilities"
-                  placeholder={calcDefaultCleaningUtilities(property) || '例: 15万円'}
+                  placeholder={calcDefaultCleaningUtilities(property) || '例: 150,000円'}
                   value={property.cleaningUtilities || calcDefaultCleaningUtilities(property)}
                   onChange={(e) => update('cleaningUtilities', e.target.value)}
                   className="bg-card"

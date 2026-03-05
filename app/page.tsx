@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { AppHeader } from '@/components/app-header'
 import { PropertyForm } from '@/components/property-form'
 import { ComparisonTable } from '@/components/comparison-table'
-import { type Property, withExpenseDefaults } from '@/lib/property-types'
+import { type Property, withExpenseDefaults, parseYenToMan, formatYenFromMan } from '@/lib/property-types'
 import { supabase } from '@/lib/supabase'
 import {
   AlertDialog,
@@ -21,9 +21,9 @@ const SAMPLE_PROPERTIES: Property[] = [
   withExpenseDefaults({
     id: 'sample-1',
     name: 'パークハウス表参道',
-    propertyPrice: '6,980万円',
-    repairCost: '1,200万円',
-    otherCost: '350万円',
+    propertyPrice: '69,800,000円',
+    repairCost: '12,000,000円',
+    otherCost: '3,500,000円',
     registrationFees: '',
     brokerageFee: '',
     stampDuty: '',
@@ -31,10 +31,10 @@ const SAMPLE_PROPERTIES: Property[] = [
     propertyTaxSettlement: '',
     bankFee: '',
     acquisitionTax: '',
-    loanAmount: '6,980万円',
+    loanAmount: '69,800,000円',
     rentIncomeItems: [
-      { id: '1', roomType: '1K', units: '5', rentPerUnit: '8万円' },
-      { id: '2', roomType: '1LDK', units: '3', rentPerUnit: '12万円' },
+      { id: '1', roomType: '1K', units: '5', rentPerUnit: '80,000円' },
+      { id: '2', roomType: '1LDK', units: '3', rentPerUnit: '120,000円' },
     ],
     repaymentLoanAmount: '',
     interestRate: '2%',
@@ -57,9 +57,9 @@ const SAMPLE_PROPERTIES: Property[] = [
   withExpenseDefaults({
     id: 'sample-2',
     name: 'ブリリアタワー目黒',
-    propertyPrice: '5,480万円',
-    repairCost: '800万円',
-    otherCost: '200万円',
+    propertyPrice: '54,800,000円',
+    repairCost: '8,000,000円',
+    otherCost: '2,000,000円',
     registrationFees: '',
     brokerageFee: '',
     stampDuty: '',
@@ -67,10 +67,10 @@ const SAMPLE_PROPERTIES: Property[] = [
     propertyTaxSettlement: '',
     bankFee: '',
     acquisitionTax: '',
-    loanAmount: '5,480万円',
+    loanAmount: '54,800,000円',
     rentIncomeItems: [
-      { id: '1', roomType: '2LDK', units: '4', rentPerUnit: '15万円' },
-      { id: '2', roomType: '3LDK', units: '2', rentPerUnit: '20万円' },
+      { id: '1', roomType: '2LDK', units: '4', rentPerUnit: '150,000円' },
+      { id: '2', roomType: '3LDK', units: '2', rentPerUnit: '200,000円' },
     ],
     repaymentLoanAmount: '',
     interestRate: '1.8%',
@@ -93,9 +93,9 @@ const SAMPLE_PROPERTIES: Property[] = [
   withExpenseDefaults({
     id: 'sample-3',
     name: 'シティハウス新宿御苑',
-    propertyPrice: '4,280万円',
-    repairCost: '600万円',
-    otherCost: '150万円',
+    propertyPrice: '42,800,000円',
+    repairCost: '6,000,000円',
+    otherCost: '1,500,000円',
     registrationFees: '',
     brokerageFee: '',
     stampDuty: '',
@@ -103,9 +103,9 @@ const SAMPLE_PROPERTIES: Property[] = [
     propertyTaxSettlement: '',
     bankFee: '',
     acquisitionTax: '',
-    loanAmount: '4,280万円',
+    loanAmount: '42,800,000円',
     rentIncomeItems: [
-      { id: '1', roomType: '1LDK', units: '6', rentPerUnit: '10万円' },
+      { id: '1', roomType: '1LDK', units: '6', rentPerUnit: '100,000円' },
     ],
     repaymentLoanAmount: '',
     interestRate: '2.2%',
@@ -277,27 +277,18 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
   )
 }
 
-function parseCostToNumber(value: string): number | null {
-  const cleaned = value.replace(/,/g, '').replace(/\s/g, '')
-  const match = cleaned.match(/([\d.]+)\s*万/)
-  if (match) return parseFloat(match[1])
-  const numOnly = cleaned.match(/^([\d.]+)$/)
-  if (numOnly) return parseFloat(numOnly[1])
-  return null
-}
-
 function getMinTotalCost(properties: Property[]): string {
   const costs = properties
     .map(p => {
       const vals = [p.propertyPrice, p.repairCost, p.otherCost]
-        .map(parseCostToNumber)
+        .map(parseYenToMan)
         .filter((v): v is number => v !== null)
       return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) : null
     })
     .filter((c): c is number => c !== null)
   if (costs.length === 0) return '-'
-  const min = Math.min(...costs)
-  return `${min.toLocaleString('ja-JP')}万円`
+  const minMan = Math.min(...costs)
+  return formatYenFromMan(minMan)
 }
 
 function getMaxTotalFloorArea(properties: Property[]): string {

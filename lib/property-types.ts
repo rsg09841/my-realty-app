@@ -2,7 +2,7 @@ export interface RentIncomeItem {
   id: string
   roomType: string // 1R, 1K, 1DK, 1LDK, etc.
   units: string // 戸数
-  rentPerUnit: string // 1戸当たり賃料
+  rentPerUnit: string // 1戸当たり賃料（円）
 }
 
 export const ROOM_TYPES = [
@@ -37,16 +37,35 @@ export function createEmptyRentIncomeItem(): RentIncomeItem {
 /** Calculate rent total for a single item (戸数 × 1戸当たり賃料) */
 export function calcRentItemTotal(item: RentIncomeItem): number {
   const units = parseInt(item.units, 10)
-  const rentPerUnit = parseYenToMan(item.rentPerUnit)
+  const rentPerUnit = parseRentYenToMan(item.rentPerUnit)
   if (isNaN(units) || units <= 0 || rentPerUnit === null) return 0
   return units * rentPerUnit
 }
 
-/** Calculate total rent income from all items */
+/** Calculate total rent income from all items (displayed in 円) */
 export function calcTotalRentIncome(items: RentIncomeItem[]): string {
-  const total = items.reduce((sum, item) => sum + calcRentItemTotal(item), 0)
-  if (total === 0) return ''
-  return formatMan(total)
+  const totalMan = items.reduce((sum, item) => sum + calcRentItemTotal(item), 0)
+  if (totalMan === 0) return ''
+  return formatYenFromMan(totalMan)
+}
+
+/** Format a number in 万円 to a display string in 円 */
+export function formatYenFromMan(value: number): string {
+  const yen = Math.round(value * 10000)
+  return `${yen.toLocaleString('ja-JP')}円`
+}
+
+/** Calculate full occupancy yield (年間家賃収入 ÷ 物件価格) as percentage string */
+export function calcFullOccupancyYield(property: Property): string {
+  const annualRentMan = getTotalRentIncomeNum(property.rentIncomeItems)
+  const priceMan = parseYenToMan(property.propertyPrice)
+  if (!priceMan || annualRentMan === 0) return ''
+  const ratio = (annualRentMan / priceMan) * 100
+  const rounded = Math.round(ratio * 10) / 10
+  return `${rounded.toLocaleString('ja-JP', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}%`
 }
 
 export interface Property {
@@ -168,15 +187,27 @@ export function createEmptyProperty(): Property {
   }
 }
 
-/** Parse a Japanese yen string like "5,980万円" or "500万円" to a number (in 万円 units) */
+/** Parse a Japanese yen string like "5,980万円" or "5,980,000円" to a number (in 万円 units) */
 export function parseYenToMan(value: string): number | null {
   if (!value) return null
   const cleaned = value.replace(/,/g, '').replace(/\s/g, '')
-  const match = cleaned.match(/([\d.]+)\s*万/)
-  if (match) return parseFloat(match[1])
-  const numOnly = cleaned.match(/^([\d.]+)$/)
-  if (numOnly) return parseFloat(numOnly[1])
-  return null
+  const manMatch = cleaned.match(/([\d.]+)\s*万/)
+  if (manMatch) return parseFloat(manMatch[1])
+
+  const yenCleaned = cleaned.replace(/円/g, '')
+  const num = parseFloat(yenCleaned)
+  if (isNaN(num)) return null
+  // Interpret plain numbers / 円表記 as 円, convert to 万円
+  return num / 10000
+}
+
+/** Parse yen amount string like "80,000" or "80,000円" to a number (in 万円 units) */
+export function parseRentYenToMan(value: string): number | null {
+  if (!value) return null
+  const cleaned = value.replace(/,/g, '').replace(/\s/g, '').replace(/円/g, '')
+  const num = parseFloat(cleaned)
+  if (isNaN(num)) return null
+  return num / 10000
 }
 
 /** Format a number (万円 unit) to a display string */
@@ -195,7 +226,7 @@ export function calcTotalProjectCost(property: Property): string {
   const valid = parsed.filter((v): v is number => v !== null)
   if (valid.length === 0) return ''
   const total = valid.reduce((sum, v) => sum + v, 0)
-  return formatMan(total)
+  return formatYenFromMan(total)
 }
 
 /** Calculate total expenses (諸経費合計) from all expense fields */
@@ -205,7 +236,7 @@ export function calcTotalExpenses(property: Property): string {
   const valid = parsed.filter((v): v is number => v !== null)
   if (valid.length === 0) return ''
   const total = valid.reduce((sum, v) => sum + v, 0)
-  return formatMan(total)
+  return formatYenFromMan(total)
 }
 
 /** Get grand total as a number (万円), returns null if not calculable */
@@ -229,7 +260,7 @@ export function calcGrandTotal(property: Property): string {
   const expenseTotal = expenseValid.length > 0 ? expenseValid.reduce((s, v) => s + v, 0) : null
 
   if (projectCost === null && expenseTotal === null) return ''
-  return formatMan((projectCost ?? 0) + (expenseTotal ?? 0))
+  return formatYenFromMan((projectCost ?? 0) + (expenseTotal ?? 0))
 }
 
 /** Get total project cost as a number (万円), returns null if not calculable */
@@ -261,20 +292,20 @@ export function calcExpenseDefaults(property: Property): Partial<Record<string, 
 
   // Registration fees: 事業費合計 × 2%
   if (totalMan !== null && totalMan > 0) {
-    result.registrationFees = formatMan(totalMan * 0.02)
+    result.registrationFees = formatYenFromMan(totalMan * 0.02)
   }
 
   // Brokerage fee: (property price * 3% + 6万) * 1.1
   if (priceMan !== null && priceMan > 0) {
-    result.brokerageFee = formatMan((priceMan * 0.03 + 6) * 1.1)
+    result.brokerageFee = formatYenFromMan((priceMan * 0.03 + 6) * 1.1)
   }
 
-  // Stamp duty: fixed 1万円
-  result.stampDuty = '1万円'
+  // Stamp duty: fixed 100,000円
+  result.stampDuty = '100,000円'
 
   // Fire insurance (5 years): property price * 1%
   if (priceMan !== null && priceMan > 0) {
-    result.fireInsurance = formatMan(priceMan * 0.01)
+    result.fireInsurance = formatYenFromMan(priceMan * 0.01)
   }
 
   // 固定資産税精算金: formula TBD (leave empty)
@@ -282,7 +313,7 @@ export function calcExpenseDefaults(property: Property): Partial<Record<string, 
 
   // Acquisition tax: total project cost * 1%
   if (totalMan !== null && totalMan > 0) {
-    result.acquisitionTax = formatMan(totalMan * 0.01)
+    result.acquisitionTax = formatYenFromMan(totalMan * 0.01)
   }
 
   return result
@@ -295,7 +326,7 @@ export function calcOwnFunds(property: Property): string {
   
   if (grandTotal === null) return ''
   const ownFunds = grandTotal - (loanAmount ?? 0)
-  return formatMan(ownFunds)
+  return formatYenFromMan(ownFunds)
 }
 
 /** Get default loan amount (物件価格) */
@@ -351,7 +382,7 @@ export function calcMonthlyRepayment(property: Property): string {
   const monthlyPayment = calcPMT(loanAmount, rate, term)
   if (monthlyPayment <= 0) return ''
   
-  return formatMan(monthlyPayment)
+  return formatYenFromMan(monthlyPayment)
 }
 
 /** Calculate annual repayment amount (monthly × 12) */
@@ -365,7 +396,7 @@ export function calcAnnualRepayment(property: Property): string {
   const monthlyPayment = calcPMT(loanAmount, rate, term)
   if (monthlyPayment <= 0) return ''
   
-  return formatMan(monthlyPayment * 12)
+  return formatYenFromMan(monthlyPayment * 12)
 }
 
 /** Get total rent income as number (万円) */
@@ -389,21 +420,21 @@ export function getAnnualRepaymentNum(property: Property): number {
 export function calcDefaultPropertyTax(property: Property): string {
   const annualRent = getTotalRentIncomeNum(property.rentIncomeItems)
   if (annualRent === 0) return ''
-  return formatMan(annualRent * 0.06)
+  return formatYenFromMan(annualRent * 0.06)
 }
 
 /** Calculate default management fee (管理料) = 年間家賃収入 × 5% */
 export function calcDefaultManagementFee(property: Property): string {
   const annualRent = getTotalRentIncomeNum(property.rentIncomeItems)
   if (annualRent === 0) return ''
-  return formatMan(annualRent * 0.05)
+  return formatYenFromMan(annualRent * 0.05)
 }
 
 /** Calculate default cleaning/utilities (清掃・水道光熱) = 年間家賃収入 × 2% */
 export function calcDefaultCleaningUtilities(property: Property): string {
   const annualRent = getTotalRentIncomeNum(property.rentIncomeItems)
   if (annualRent === 0) return ''
-  return formatMan(annualRent * 0.02)
+  return formatYenFromMan(annualRent * 0.02)
 }
 
 /** Calculate annual income/expense balance (年間収支合計) */
@@ -417,7 +448,7 @@ export function calcAnnualBalance(property: Property): string {
   if (annualRent === 0) return ''
   
   const balance = annualRent - annualRepayment - propertyTax - managementFee - cleaningUtilities
-  return formatMan(balance)
+  return formatYenFromMan(balance)
 }
 
 /** Calculate monthly income/expense balance (月間収支合計) = 年間収支合計 / 12 */
@@ -431,7 +462,7 @@ export function calcMonthlyBalance(property: Property): string {
   if (annualRent === 0) return ''
   
   const balance = annualRent - annualRepayment - propertyTax - managementFee - cleaningUtilities
-  return formatMan(balance / 12)
+  return formatYenFromMan(balance / 12)
 }
 
 /** Pre-populate expense defaults for a property (used for sample data) */

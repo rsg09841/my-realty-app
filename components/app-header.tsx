@@ -18,7 +18,7 @@ export function AppHeader({ propertyCount, onAddClick }: AppHeaderProps) {
           </div>
           <div>
             <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">
-              BUKKEN COMPARE
+              株式会社アンリアルティ
             </h1>
             <p className="hidden text-xs text-muted-foreground sm:block">
               不動産物件比較ツール
